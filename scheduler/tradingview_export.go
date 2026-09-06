@@ -338,6 +338,15 @@ func tradingViewSymbol(sc StrategyConfig, trade Trade, overrides map[string]stri
 		if isLikelyCryptoPair(ticker) {
 			return "OKX:" + ticker, nil
 		}
+	case "bybit":
+		if tradeType == "perps" || strings.Contains(strings.ToUpper(raw), "PERP") || strings.Contains(strings.ToUpper(raw), "LINEAR") {
+			if base, quote, ok := splitCryptoPair(raw); ok {
+				return "BYBIT:" + base + quote + ".P", nil
+			}
+		}
+		if isLikelyCryptoPair(ticker) {
+			return "BYBIT:" + ticker, nil
+		}
 	}
 	return "", fmt.Errorf("no TradingView symbol mapping for strategy %s platform=%q symbol=%q; add tradingview_export.symbol_overrides", sc.ID, sc.Platform, trade.Symbol)
 }
@@ -385,6 +394,8 @@ func platformOverrideAliases(platform string) []string {
 		return []string{"ibkr"}
 	case "okx":
 		return []string{"okx"}
+	case "bybit":
+		return []string{"bybit"}
 	case "luno":
 		return []string{"luno"}
 	default:

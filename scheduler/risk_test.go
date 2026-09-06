@@ -466,6 +466,7 @@ func TestCollectPerpsMarkSymbols(t *testing.T) {
 		strategies []StrategyConfig
 		wantHL     []string
 		wantOKX    []string
+		wantBybit  []string
 	}{
 		{
 			name: "perps split by venue, deduplicated and sorted",
@@ -475,14 +476,17 @@ func TestCollectPerpsMarkSymbols(t *testing.T) {
 				{ID: "hl-trend-eth", Type: "perps", Platform: "hyperliquid", Args: []string{"trend", "ETH", "1h"}},
 				{ID: "okx-ema-sol-perp", Type: "perps", Platform: "okx", Args: []string{"ema", "SOL", "1h"}},
 				{ID: "okx-ema-btc-perp", Type: "perps", Platform: "okx", Args: []string{"ema", "BTC", "1h"}},
+				{ID: "bybit-vm-near-perp", Type: "perps", Platform: "bybit", Args: []string{"volume_momentum", "NEAR", "4h", "--mode=paper"}},
+				{ID: "bybit-vm-btc-perp", Type: "perps", Platform: "bybit", Args: []string{"volume_momentum", "BTC", "4h", "--mode=paper"}},
 				{ID: "sma-btc", Type: "spot", Platform: "binanceus", Args: []string{"sma", "BTC/USDT", "1h"}},
 				{ID: "deribit-vol-btc", Type: "options", Platform: "deribit", Args: []string{"vol", "BTC"}},
 				{ID: "ts-trend-es", Type: "futures", Platform: "topstep", Args: []string{"trend", "ES", "1h"}},
 				{ID: "hl-short", Type: "perps", Platform: "hyperliquid", Args: []string{"trend"}},
 				{ID: "hl-empty", Type: "perps", Platform: "hyperliquid", Args: []string{"trend", "", "1h"}},
 			},
-			wantHL:  []string{"BTC", "ETH"},
-			wantOKX: []string{"BTC", "SOL"},
+			wantHL:    []string{"BTC", "ETH"},
+			wantOKX:   []string{"BTC", "SOL"},
+			wantBybit: []string{"BTC", "NEAR"},
 		},
 		{
 			name: "no perps yields empty lists",
@@ -510,7 +514,15 @@ func TestCollectPerpsMarkSymbols(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			hlCoins, okxCoins := collectPerpsMarkSymbols(tc.strategies)
+			hlCoins, okxCoins, bybitCoins := collectPerpsMarkSymbols(tc.strategies)
+			if len(bybitCoins) != len(tc.wantBybit) {
+				t.Fatalf("bybitCoins = %v, want %v", bybitCoins, tc.wantBybit)
+			}
+			for i, c := range tc.wantBybit {
+				if bybitCoins[i] != c {
+					t.Errorf("bybitCoins[%d] = %q, want %q", i, bybitCoins[i], c)
+				}
+			}
 			if len(hlCoins) != len(tc.wantHL) {
 				t.Fatalf("hlCoins = %v, want %v", hlCoins, tc.wantHL)
 			}

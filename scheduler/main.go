@@ -838,7 +838,7 @@ func main() {
 
 		symbols := collectPriceSymbols(cfg.Strategies)
 		futuresSymbols := collectFuturesMarkSymbols(cfg.Strategies)
-		hlPerpsCoins, okxPerpsCoins := collectPerpsMarkSymbols(cfg.Strategies)
+		hlPerpsCoins, okxPerpsCoins, bybitPerpsCoins := collectPerpsMarkSymbols(cfg.Strategies)
 
 		feedCtx := &marketFeedContext{Enabled: websocketFeed, Requirements: feedReq, Interval: cfg.IntervalSeconds}
 		var cycleFeedReqs cycleMarketRequirements
@@ -916,6 +916,19 @@ func main() {
 				for _, coin := range okxPerpsCoins {
 					if _, ok := prices[coin]; !ok {
 						fmt.Printf("[WARN] No OKX perps mark for %s — PortfolioNotional/Value will fall back to entry cost\n", coin)
+					}
+				}
+			}
+		}
+		if len(bybitPerpsCoins) > 0 {
+			bybitMarks, err := fetchBybitPerpsMids(bybitPerpsCoins)
+			if err != nil {
+				fmt.Printf("[WARN] Bybit perps marks fetch failed for %v: %v — portfolio notional will use entry cost for open Bybit perps positions\n", bybitPerpsCoins, err)
+			} else {
+				mergePerpsMarks(prices, bybitMarks)
+				for _, coin := range bybitPerpsCoins {
+					if _, ok := prices[coin]; !ok {
+						fmt.Printf("[WARN] No Bybit perps mark for %s — PortfolioNotional/Value will fall back to entry cost\n", coin)
 					}
 				}
 			}
@@ -1689,7 +1702,7 @@ func main() {
 				}
 
 				hlLiveStrategy := sc.Type == "perps" && sc.Platform == "hyperliquid" && hyperliquidIsLive(sc.Args)
-				okxLiveStrategy := sc.Platform == "okx" && okxIsLive(sc.Args)
+				ccxtLiveStrategy := isCCXTStrategy(sc) && ccxtIsLive(sc)
 				rhLiveStrategy := sc.Type == "spot" && sc.Platform == "robinhood" && robinhoodIsLive(sc.Args)
 				tsLiveStrategy := sc.Type == "futures" && sc.Platform == "topstep" && topstepIsLive(sc.Args)
 
@@ -1779,8 +1792,8 @@ func main() {
 				var okxPosLeverage float64
 				var okxPoolBalanceKnown bool
 				var okxPosCtx PositionCtx
-				if sc.Platform == "okx" {
-					if okxLiveStrategy {
+				if isCCXTStrategy(sc) {
+					if ccxtLiveStrategy {
 						if sc.Type == "perps" {
 							if poolCash, pooled, balanceKnown := sharedWalletPoolAvailableMargin(sc, cfg.Strategies, state, prices, sharedWallets, walletBalances); pooled {
 								okxCash = poolCash
@@ -1941,7 +1954,7 @@ func main() {
 							mu.Unlock()
 							var execResult *OKXExecuteResult
 							liveExecFailed := false
-							if okxIsLive(sc.Args) && result.Signal != 0 {
+							if ccxtIsLive(sc) && result.Signal != 0 {
 								if er, ok2 := runOKXExecuteOrder(sc, result, price, okxCash, okxPoolBalanceKnown, okxCashReconcile, okxPosQty, okxPosSide, okxAvgCost, okxPosLeverage, hurstDecision, notifier, logger); ok2 {
 									execResult = er
 								} else {
@@ -2118,7 +2131,7 @@ func main() {
 						logger.Info("Regime profile: window=%s label=%s active=%q (pending=%q seen=%d)",
 							sc.RegimeProfileAllocation.Window, palLabel, hlProfileActive, hlProfileNext.PendingProfile, hlProfileNext.PendingBarsSeen)
 					}
-					if sc.Platform == "okx" {
+					if isCCXTStrategy(sc) {
 						if result, signalStr, price, ok := runOKXCheck(sc, prices, okxPosCtx, cfg.Regime, resolveATRMethod(sc, cfg), notifier, logger); ok {
 							prices[result.Symbol] = price
 							storeRegime := globalRegimeStore.PayloadForStrategy(sc, cfg.Regime)
@@ -2157,7 +2170,7 @@ func main() {
 							mu.Unlock()
 							var execResult *OKXExecuteResult
 							liveExecFailed := false
-							if okxIsLive(sc.Args) && result.Signal != 0 {
+							if ccxtIsLive(sc) && result.Signal != 0 {
 								if er, ok2 := runOKXExecuteOrder(sc, result, price, okxCash, okxPoolBalanceKnown, okxCashReconcile, okxPosQty, okxPosSide, okxAvgCost, okxPosLeverage, hurstDecision, notifier, logger); ok2 {
 									execResult = er
 								} else {
@@ -4489,7 +4502,7 @@ func findLeaderboardSummariesByChannel(cfg *Config, channelID string) []Leaderbo
 }
 
 func augmentMarksBestEffort(cfg *Config, prices map[string]float64) {
-	hlPerpsCoins, okxPerpsCoins := collectPerpsMarkSymbols(cfg.Strategies)
+	hlPerpsCoins, okxPerpsCoins, bybitPerpsCoins := collectPerpsMarkSymbols(cfg.Strategies)
 	futuresSymbols := collectFuturesMarkSymbols(cfg.Strategies)
 
 	if len(hlPerpsCoins) > 0 {
@@ -4502,6 +4515,13 @@ func augmentMarksBestEffort(cfg *Config, prices map[string]float64) {
 	if len(okxPerpsCoins) > 0 {
 		if marks, err := fetchOKXPerpsMids(okxPerpsCoins); err != nil {
 			fmt.Fprintf(os.Stderr, "[WARN] OKX perps marks fetch failed for %v: %v — summary will use entry cost\n", okxPerpsCoins, err)
+		} else {
+			mergePerpsMarks(prices, marks)
+		}
+	}
+	if len(bybitPerpsCoins) > 0 {
+		if marks, err := fetchBybitPerpsMids(bybitPerpsCoins); err != nil {
+			fmt.Fprintf(os.Stderr, "[WARN] Bybit perps marks fetch failed for %v: %v — summary will use entry cost\n", bybitPerpsCoins, err)
 		} else {
 			mergePerpsMarks(prices, marks)
 		}

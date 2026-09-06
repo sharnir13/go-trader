@@ -13,17 +13,18 @@ import (
 )
 
 type StatusServer struct {
-	state          *AppState
-	mu             *sync.RWMutex
-	statusToken    string
-	priceSymbols   []string
-	futuresSymbols []string
-	hlPerpsCoins   []string
-	okxPerpsCoins  []string
-	stateDB        *StateStore
-	candleFetcher  UICandleFetcher
-	candleCache    *UICandleCache
-	tuning         *tuningRunManager
+	state           *AppState
+	mu              *sync.RWMutex
+	statusToken     string
+	priceSymbols    []string
+	futuresSymbols  []string
+	hlPerpsCoins    []string
+	okxPerpsCoins   []string
+	bybitPerpsCoins []string
+	stateDB         *StateStore
+	candleFetcher   UICandleFetcher
+	candleCache     *UICandleCache
+	tuning          *tuningRunManager
 
 	strategiesMu      sync.RWMutex
 	strategies        []StrategyConfig
@@ -46,11 +47,12 @@ type StatusServer struct {
 	tradeDepsHook func(*manualCoreDeps)
 	restartFn     func() error
 
-	perpsErrMu              sync.Mutex
-	lastFuturesErrLoggedAt  time.Time
-	lastFuturesModeLoggedAt time.Time
-	lastHLPerpsErrLoggedAt  time.Time
-	lastOKXPerpsErrLoggedAt time.Time
+	perpsErrMu                sync.Mutex
+	lastFuturesErrLoggedAt    time.Time
+	lastFuturesModeLoggedAt   time.Time
+	lastHLPerpsErrLoggedAt    time.Time
+	lastOKXPerpsErrLoggedAt   time.Time
+	lastBybitPerpsErrLoggedAt time.Time
 }
 
 const perpsErrLogInterval = 5 * time.Minute
@@ -62,20 +64,21 @@ const statusPortMaxAttempts = 5
 func NewStatusServer(state *AppState, mu *sync.RWMutex, statusToken string, strategies []StrategyConfig, stateDB *StateStore) *StatusServer {
 	symbols := collectPriceSymbols(strategies)
 	futuresSymbols := collectFuturesMarkSymbols(strategies)
-	hlCoins, okxCoins := collectPerpsMarkSymbols(strategies)
+	hlCoins, okxCoins, bybitCoins := collectPerpsMarkSymbols(strategies)
 	return &StatusServer{
-		state:          state,
-		mu:             mu,
-		statusToken:    statusToken,
-		priceSymbols:   symbols,
-		futuresSymbols: futuresSymbols,
-		hlPerpsCoins:   hlCoins,
-		okxPerpsCoins:  okxCoins,
-		strategies:     strategies,
-		stateDB:        stateDB,
-		candleFetcher:  FetchUICandles,
-		candleCache:    NewUICandleCache(30 * time.Second),
-		reloadConfig:   requestSIGHUPReload,
+		state:           state,
+		mu:              mu,
+		statusToken:     statusToken,
+		priceSymbols:    symbols,
+		futuresSymbols:  futuresSymbols,
+		hlPerpsCoins:    hlCoins,
+		okxPerpsCoins:   okxCoins,
+		bybitPerpsCoins: bybitCoins,
+		strategies:      strategies,
+		stateDB:         stateDB,
+		candleFetcher:   FetchUICandles,
+		candleCache:     NewUICandleCache(30 * time.Second),
+		reloadConfig:    requestSIGHUPReload,
 	}
 }
 
@@ -161,6 +164,18 @@ func (ss *StatusServer) logOKXPerpsErrThrottled(err error) {
 	ss.lastOKXPerpsErrLoggedAt = now
 	fmt.Printf("[WARN] /status OKX perps marks fetch failed for %v: %v — PortfolioNotional/Value will fall back to entry cost (throttled, next log in %s)\n",
 		ss.okxPerpsCoins, err, perpsErrLogInterval)
+}
+
+func (ss *StatusServer) logBybitPerpsErrThrottled(err error) {
+	ss.perpsErrMu.Lock()
+	defer ss.perpsErrMu.Unlock()
+	now := time.Now()
+	if !ss.lastBybitPerpsErrLoggedAt.IsZero() && now.Sub(ss.lastBybitPerpsErrLoggedAt) < perpsErrLogInterval {
+		return
+	}
+	ss.lastBybitPerpsErrLoggedAt = now
+	fmt.Printf("[WARN] /status Bybit perps marks fetch failed for %v: %v — PortfolioNotional/Value will fall back to entry cost (throttled, next log in %s)\n",
+		ss.bybitPerpsCoins, err, perpsErrLogInterval)
 }
 
 func resolveStatusPort(cliFlag, cfgPort int) int {
@@ -520,6 +535,13 @@ func (ss *StatusServer) fetchLiveMarkPrices() map[string]float64 {
 			mergePerpsMarks(prices, okxMarks)
 		} else {
 			ss.logOKXPerpsErrThrottled(err)
+		}
+	}
+	if len(ss.bybitPerpsCoins) > 0 {
+		if bybitMarks, err := fetchBybitPerpsMids(ss.bybitPerpsCoins); err == nil {
+			mergePerpsMarks(prices, bybitMarks)
+		} else {
+			ss.logBybitPerpsErrThrottled(err)
 		}
 	}
 	if len(ss.futuresSymbols) > 0 {

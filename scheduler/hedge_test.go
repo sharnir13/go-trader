@@ -1193,7 +1193,7 @@ func TestSetHyperliquidCircuitBreakerPendingSkipsFlatHedge(t *testing.T) {
 }
 
 func TestCollectPerpsMarkSymbolsIncludesHedgeCoins(t *testing.T) {
-	hl, _ := collectPerpsMarkSymbols([]StrategyConfig{hedgeTestConfig()})
+	hl, _, _ := collectPerpsMarkSymbols([]StrategyConfig{hedgeTestConfig()})
 	found := map[string]bool{}
 	for _, c := range hl {
 		found[c] = true

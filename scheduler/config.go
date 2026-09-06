@@ -1102,6 +1102,8 @@ func loadConfig(path string, skipLiveCredentialChecks bool, readOnly bool) (*Con
 				cfg.Strategies[i].Platform = "luno"
 			case strings.HasPrefix(cfg.Strategies[i].ID, "okx-"):
 				cfg.Strategies[i].Platform = "okx"
+			case strings.HasPrefix(cfg.Strategies[i].ID, "bybit-"):
+				cfg.Strategies[i].Platform = "bybit"
 			case cfg.Strategies[i].Type == "options":
 				cfg.Strategies[i].Platform = "deribit"
 			default:
@@ -1687,10 +1689,16 @@ func validateConfig(cfg *Config, skipLiveCredentialChecks bool) error {
 				}
 			}
 
+			if sc.Platform == "bybit" && sc.Type != "perps" {
+				errs = append(errs, fmt.Sprintf("%s: Bybit platform supports type=perps only, got %q", prefix, sc.Type))
+			}
+
 			if sc.Type == "perps" || (sc.Platform == "okx" && sc.Type == "spot") {
 				for _, arg := range sc.Args {
 					if arg == "--mode=live" {
-						if sc.Platform == "okx" {
+						if sc.Platform == "bybit" {
+							errs = append(errs, fmt.Sprintf("%s: Bybit live mode is not wired in the scheduler yet — use --mode=paper", prefix))
+						} else if sc.Platform == "okx" {
 							if os.Getenv("OKX_API_KEY") == "" {
 								errs = append(errs, fmt.Sprintf("%s: --mode=live requires OKX_API_KEY env var", prefix))
 							}

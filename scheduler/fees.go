@@ -20,6 +20,9 @@ const (
 	OKXPerpsTakerFeePct = 0.0005
 	OKXOptionFeePct     = 0.0003
 
+	BybitSpotTakerFeePct  = 0.001
+	BybitPerpsTakerFeePct = 0.00055
+
 	SlippagePct = 0.0005
 )
 
@@ -48,6 +51,10 @@ func CalculatePlatformSpotFee(platform string, value float64) float64 {
 		return value * OKXSpotTakerFeePct
 	case "okx-perps":
 		return value * OKXPerpsTakerFeePct
+	case "bybit":
+		return value * BybitSpotTakerFeePct
+	case "bybit-perps":
+		return value * BybitPerpsTakerFeePct
 	default:
 		return CalculateSpotFee(value)
 	}

@@ -179,10 +179,7 @@ func applyPerpsScaleIn(s *StrategyState, sc StrategyConfig, symbol string, addPr
 		}
 		return 0, nil
 	}
-	feePlatform := s.Platform
-	if s.Platform == "okx" && s.Type == "perps" {
-		feePlatform = "okx-perps"
-	}
+	feePlatform := ccxtFeePlatformKey(s)
 	notional := addQty * addPrice
 	fee := executionFee(CalculatePlatformSpotFee(feePlatform, notional), fillFee, useFillFee)
 	s.Cash -= fee

@@ -38,9 +38,10 @@ func collectPriceSymbols(strategies []StrategyConfig) []string {
 	return symbols
 }
 
-func collectPerpsMarkSymbols(strategies []StrategyConfig) (hlCoins, okxCoins []string) {
+func collectPerpsMarkSymbols(strategies []StrategyConfig) (hlCoins, okxCoins, bybitCoins []string) {
 	hlSet := make(map[string]bool)
 	okxSet := make(map[string]bool)
+	bybitSet := make(map[string]bool)
 	for _, sc := range strategies {
 		var coin string
 		switch sc.Type {
@@ -65,6 +66,8 @@ func collectPerpsMarkSymbols(strategies []StrategyConfig) (hlCoins, okxCoins []s
 			hlSet[coin] = true
 		case "okx":
 			okxSet[coin] = true
+		case "bybit":
+			bybitSet[coin] = true
 		}
 	}
 	for _, coin := range hedgeCoinsForStrategies(strategies) {
@@ -81,7 +84,13 @@ func collectPerpsMarkSymbols(strategies []StrategyConfig) (hlCoins, okxCoins []s
 		okxCoins = append(okxCoins, c)
 	}
 	sort.Strings(okxCoins)
-	return hlCoins, okxCoins
+
+	bybitCoins = make([]string, 0, len(bybitSet))
+	for c := range bybitSet {
+		bybitCoins = append(bybitCoins, c)
+	}
+	sort.Strings(bybitCoins)
+	return hlCoins, okxCoins, bybitCoins
 }
 
 func mergePerpsMarks(prices map[string]float64, marks map[string]float64) {
@@ -1071,7 +1080,7 @@ func classifyPositionTradeType(s *StrategyState, pos *Position) string {
 			switch {
 			case s.Platform == "hyperliquid" && (s.Type == "perps" || s.Type == "manual"):
 				return "perps"
-			case s.Platform == "okx" && s.Type == "perps":
+			case isCCXTPerpState(s):
 				return "perps"
 			}
 		}

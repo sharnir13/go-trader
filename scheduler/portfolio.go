@@ -199,10 +199,7 @@ func bookPerpsCloseWithFillFee(s *StrategyState, symbol string, closePx, fillFee
 	} else {
 		pnl = qty * (avgCost - closePx)
 	}
-	feePlatform := s.Platform
-	if s.Platform == "okx" && s.Type == "perps" {
-		feePlatform = "okx-perps"
-	}
+	feePlatform := ccxtFeePlatformKey(s)
 	fee := CalculatePlatformSpotFee(feePlatform, qty*closePx)
 	feeSource := FeeSourceModeled
 	if useFillFee {
@@ -275,10 +272,7 @@ func bookPerpsPartialCloseWithFillFee(s *StrategyState, symbol string, closeQty,
 	} else {
 		pnl = qty * (avgCost - closePx)
 	}
-	feePlatform := s.Platform
-	if s.Platform == "okx" && s.Type == "perps" {
-		feePlatform = "okx-perps"
-	}
+	feePlatform := ccxtFeePlatformKey(s)
 	fee := CalculatePlatformSpotFee(feePlatform, qty*closePx)
 	feeSource := FeeSourceModeled
 	if useFillFee {
@@ -899,10 +893,7 @@ func executePerpsSignalWithLeverage(s *StrategyState, signal int, symbol string,
 	partialClose := closeFraction > 0 && closeFraction < 1
 	closeOnlyAction := closeFraction > 0
 
-	feePlatform := s.Platform
-	if s.Platform == "okx" && s.Type == "perps" {
-		feePlatform = "okx-perps"
-	}
+	feePlatform := ccxtFeePlatformKey(s)
 
 	var flipCloseQty float64
 
@@ -1311,10 +1302,7 @@ func executeSpotSignalWithFillFee(s *StrategyState, signal int, symbol string, p
 	}
 	out := spotSignalExecOutcome{}
 	tradesExecuted := 0
-	feePlatform := s.Platform
-	if s.Platform == "okx" && s.Type == "perps" {
-		feePlatform = "okx-perps"
-	}
+	feePlatform := ccxtFeePlatformKey(s)
 	fillMetadataUsed := false
 	partialClose := closeFraction > 0 && closeFraction < 1
 
