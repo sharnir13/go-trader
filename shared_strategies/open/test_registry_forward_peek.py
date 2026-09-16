@@ -126,9 +126,135 @@ def _sweep_squeeze_combo_fixture() -> pd.DataFrame:
     return df
 
 
+def _volume_breakout_fixture() -> pd.DataFrame:
+    """Drifting base with periodic compression, then surge bars: ~5x volume,
+    a large body closing beyond the trailing 20-bar extreme, and a sweep wick
+    one bar earlier that the surge bar engulfs. Feeds the surge+breakout
+    entries of volume_momentum / momentum_breakout and the sweep+engulf
+    pattern of the ICT variants, none of which the generic sweep fixture
+    ever produces (it would make those truncation checks vacuous)."""
+    rng = np.random.RandomState(_SEED + 4)
+    n = 600
+    close = np.empty(n)
+    high = np.empty(n)
+    low = np.empty(n)
+    open_ = np.empty(n)
+    volume = np.empty(n)
+    c = 100.0
+    for i in range(n):
+        o = c
+        c = c + rng.randn() * 0.15 + 0.005
+        high[i] = max(o, c) + abs(rng.randn()) * 0.08
+        low[i] = min(o, c) - abs(rng.randn()) * 0.08
+        open_[i], close[i] = o, c
+        volume[i] = 100.0 + abs(rng.randn()) * 10.0
+
+    def _active(i):  # ICT variants gate entries to UTC 13-21 (default params)
+        return 13 <= (i % 24) < 21
+
+    for i in range(40, n - 2, 20):  # bearish sweep + surge
+        if not _active(i):
+            continue
+        min20 = low[max(0, i - 20):i].min()
+        low[i - 1] = min20 - 0.6
+        high[i - 1] = max(open_[i - 1], close[i - 1]) + 0.05
+        open_[i] = high[i - 1] - 0.05
+        close[i] = low[i - 1] - 0.7
+        high[i] = open_[i] + 0.05
+        low[i] = close[i] - 0.1
+        volume[i] = volume[max(0, i - 20):i].mean() * 5.0
+
+    for i in range(52, n - 2, 35):  # bullish sweep + surge
+        if not _active(i):
+            continue
+        max20 = high[max(0, i - 20):i].max()
+        high[i - 1] = max20 + 0.6
+        low[i - 1] = min(open_[i - 1], close[i - 1]) - 0.05
+        open_[i] = low[i - 1] + 0.05
+        close[i] = high[i - 1] + 0.7
+        low[i] = open_[i] - 0.1
+        high[i] = close[i] + 0.05
+        volume[i] = volume[max(0, i - 20):i].mean() * 5.0
+
+    idx = pd.date_range("2026-01-01", periods=n, freq="1h")
+    df = pd.DataFrame(
+        {"open": open_, "high": high, "low": low,
+         "close": close, "volume": volume},
+        index=idx,
+    )
+    df["close_b"] = close * 0.5
+    df["funding_rate"] = 0.00005
+    return df
+
+
+def _ict_sweep_fixture() -> pd.DataFrame:
+    """Sine-wave base whose troughs are strict ±swing_lookback local minima,
+    followed 21 bars later (when the swing is confirmed) by a sweep bar that
+    wicks below the swing low, closes back above it and bullishly engulfs the
+    prior bearish bar — the ICT reversal the strategy fades. Peaks mirror the
+    construction for shorts. All events land in the UTC 13-21 default session
+    window. volume_momentum's surge gate also fires on the engulfing bodies
+    (5x volume), which is fine: each strategy only needs non-vacuous signal
+    coverage for the truncation check."""
+    rng = np.random.RandomState(_SEED + 5)
+    n = 900
+    t = np.arange(n)
+    base = 100.0 + 2.0 * np.sin(2 * np.pi * t / 84.0) + rng.randn(n) * 0.02
+    open_ = np.empty(n)
+    close = np.empty(n)
+    high = np.empty(n)
+    low = np.empty(n)
+    volume = np.full(n, 100.0 + abs(rng.randn(n).mean()) * 5.0)
+    for i in range(n):
+        o = base[i - 1] if i else base[i]
+        c = base[i]
+        open_[i], close[i] = o, c
+        high[i] = max(o, c) + 0.05
+        low[i] = min(o, c) - 0.05
+
+    # Swing trough at k (strict local min over k±20); the strategy registers
+    # it after processing bar k+21 (confirm_pos = i-21), so the sweep+engulf
+    # pair lands on k+22 or later. Start index is 14:00 UTC and the ICT
+    # default session is UTC 13-21, so d is chosen per cycle to put the fade
+    # bar inside the window.
+    for k in range(63, n - 35, 84):
+        low[k] = low[max(0, k - 20):k + 21].min() - 1.0
+        for d in range(22, 31):
+            if 13 <= (14 + k + d) % 24 < 21:
+                break
+        else:
+            continue
+        s1, s2 = k + d - 1, k + d
+        open_[s1] = low[k] + 0.9
+        close[s1] = low[k] + 0.5
+        high[s1] = open_[s1] + 0.05
+        low[s1] = close[s1] - 0.05
+        open_[s2] = low[k] + 0.45
+        # Close above every high of the trailing 5 bars: clears both the
+        # engulfing test (s1 is a small bearish body) and CHoCH without
+        # depending on where the sine recovery sits.
+        close[s2] = high[max(0, s2 - 5):s2].max() + 0.2
+        high[s2] = close[s2] + 0.05
+        low[s2] = low[k] - 0.3
+        volume[s2] = volume[k] * 5.0
+    idx = pd.date_range("2026-01-01 14:00", periods=n, freq="1h")
+    df = pd.DataFrame(
+        {"open": open_, "high": high, "low": low,
+         "close": close, "volume": volume},
+        index=idx,
+    )
+    df["close_b"] = close * 0.5
+    df["funding_rate"] = 0.00005
+    return df
+
+
 STRATEGY_FIXTURES = {
     "range_scalper": _range_scalper_fixture,
     "sweep_squeeze_combo": _sweep_squeeze_combo_fixture,
+    "volume_momentum": _volume_breakout_fixture,
+    "momentum_breakout": _volume_breakout_fixture,
+    "ict_liquidity_sweep": _ict_sweep_fixture,
+    "ict_sweep_engulf": _ict_sweep_fixture,
 }
 
 _FIXTURE_CACHE = {}

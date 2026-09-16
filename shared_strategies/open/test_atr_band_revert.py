@@ -74,3 +74,49 @@ def test_long_invariant_holds_everywhere():
     below = valid & (r["close"] <= r["band_lower"])
     assert (r.loc[below, "signal"] == 1).all()
     assert (r.loc[valid & (r["close"] > r["band_lower"]), "signal"] == 0).all()
+
+
+def _trend_down_box(n=260):
+    """Falling market with a tight box: last close breaks the lower band
+    while far below a long SMA -> counter-trend long must be vetoed by gate."""
+    idx = pd.date_range("2024-01-01", periods=n, freq="1h")
+    closes = 200.0 - 0.5 * np.arange(n) + np.where(np.arange(n) % 5 == 0, 0.5, -0.5)
+    return pd.DataFrame({"open": closes, "high": closes + 1.0, "low": closes - 1.0,
+                         "close": closes, "volume": [1.0] * n}, index=idx)
+
+
+def test_gate_default_off_bit_identical():
+    df = _trend_down_box()
+    a = atr_band_revert_core(df, allow_short=True)
+    b = atr_band_revert_core(df, allow_short=True, gate_sma_period=0)
+    assert (a["signal"] == b["signal"]).all()
+    assert "gate_sma" not in a.columns
+
+
+def test_gate_vetoes_countertrend_long():
+    df = _trend_down_box()
+    ungated = atr_band_revert_core(df, allow_short=True)
+    gated = atr_band_revert_core(df, allow_short=True, gate_sma_period=200)
+    assert (ungated["signal"] == 1).any(), "precondition: long band break exists"
+    suppressed = (ungated["signal"] == 1) & (gated["signal"] == 0)
+    assert suppressed.any()
+    assert (gated.loc[suppressed, "close"] < gated.loc[suppressed, "gate_sma"]).all()
+
+
+def test_gate_keeps_withtrend_short_and_warmup_failopen():
+    df = _trend_down_box()
+    # Bounce on the last bar: close pierces the upper band but stays BELOW the
+    # falling SMA200 -> trend-aligned short that the gate must keep.
+    c = df["close"].to_numpy().copy()
+    c[-1] = c[-2] + 12.0
+    df["close"] = c
+    df["high"] = df["high"].to_numpy().copy()
+    df.iloc[-1, df.columns.get_loc("high")] = c[-1] + 1.0
+    ungated = atr_band_revert_core(df, allow_short=True)
+    gated = atr_band_revert_core(df, allow_short=True, gate_sma_period=200)
+    shorts = ungated["signal"] == -1
+    assert shorts.any()
+    assert (gated.loc[shorts, "signal"] == -1).all()
+    assert gated.loc[shorts, "close"].lt(gated.loc[shorts, "gate_sma"]).all()
+    warm = gated["gate_sma"].isna()
+    assert (gated.loc[warm, "signal"] == ungated.loc[warm, "signal"]).all()

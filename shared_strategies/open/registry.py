@@ -43,6 +43,10 @@ from anchored_vwap import anchored_vwap_core
 from anchored_vwap_channel import anchored_vwap_channel_core
 from anchored_vwap_reversion import anchored_vwap_reversion_core
 from analog_retrieval import analog_retrieval_core
+from volume_momentum import volume_momentum_core
+from momentum_breakout import momentum_breakout_core
+from ict_liquidity_sweep import ict_liquidity_sweep_core
+from ict_sweep_engulf import ict_sweep_engulf_core
 
 
 VALID_PLATFORMS: Tuple[str, ...] = ("spot", "futures")
@@ -1459,10 +1463,10 @@ def consolidation_range_strategy(df: pd.DataFrame, **params) -> pd.DataFrame:
 @register(
     "atr_band_revert",
     "ATR Band Reversion — ranging-market mean reversion: fade ATR-scaled bands around an SMA (long below mid-k*ATR; short above mid+k*ATR on futures). Entries only — pair with allowed_regimes=ranging and tiered_tp_atr / stop_loss_atr_mult for the take-profit-at-mid and range-break exit (see atr_band_revert.py)",
-    {"period": 20, "atr_period": 14, "k_entry": 1.5, "allow_short": False},
+    {"period": 20, "atr_period": 14, "k_entry": 1.5, "allow_short": False, "gate_sma_period": 0},
     variants={
         "futures": {
-            "description": "ATR Band Reversion — bidirectional ranging mean reversion: fade ATR-scaled bands around an SMA (long below mid-k*ATR, short above mid+k*ATR). Entries only — pair with allowed_regimes=ranging and tiered_tp_atr / stop_loss_atr_mult for exit",
+            "description": "ATR Band Reversion — bidirectional ranging mean reversion: fade ATR-scaled bands around an SMA (long below mid-k*ATR, short above mid+k*ATR), optional SMA trend gate (gate_sma_period) vetoes counter-trend entries. Entries only — pair with allowed_regimes=ranging and tiered_tp_atr / stop_loss_atr_mult for exit",
             "default_params": {"allow_short": True},
         },
     },
@@ -1602,6 +1606,72 @@ def hold_strategy(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+@register(
+    "volume_momentum",
+    "Volume Momentum — enter on volume surge + price impulse breakout (momentum confirmation from tape/footprint idea)",
+    {
+        "volume_period": 20,
+        "volume_multiplier": 2.0,
+        "volume_mode": "median",
+        "atr_period": 14,
+        "impulse_mult": 0.5,
+        "atr_expansion_mult": 1.2,
+        "lookback": 5,
+        "use_close_breakout": True,
+        "require_atr_expansion": False,
+    },
+    platforms=("futures",),
+)
+def volume_momentum_strategy(df: pd.DataFrame, **params) -> pd.DataFrame:
+    return volume_momentum_core(df, **params)
+
+
+@register(
+    "momentum_breakout",
+    "Momentum Breakout — чистый моментумный пробой 20-периодного high/low с объёмным подтверждением (BTC 1h)",
+    {
+        "lookback": 20,
+        "volume_period": 20,
+        "volume_multiplier": 1.5,
+        "require_body_direction": False,
+    },
+    platforms=("futures",),
+    constraints=[
+        "lookback > 0",
+        "volume_period > 0",
+        "volume_multiplier > 0",
+    ],
+)
+def momentum_breakout_strategy(df: pd.DataFrame, **params) -> pd.DataFrame:
+    return momentum_breakout_core(df, **params)
+
+
+@register(
+    "ict_liquidity_sweep",
+    "ICT Liquidity Sweep + Engulfing + CHoCH — fade stop-hunt sweeps after engulfing candle confirms CHoCH",
+    {"swing_lookback": 20, "choch_lookback": 5, "min_engulf_body_ratio": 1.0, "active_hours_start": 13, "active_hours_end": 21},
+    platforms=("futures",),
+)
+def ict_liquidity_sweep_strategy(df: pd.DataFrame, **params) -> pd.DataFrame:
+    return ict_liquidity_sweep_core(df, **params)
+
+
+@register(
+    "ict_sweep_engulf",
+    "ICT Sweep + Engulfing — fade liquidity sweeps when engulfing candle confirms reversal",
+    {"swing_lookback": 20, "min_engulf_body_ratio": 0.5, "active_hours_start": 13, "active_hours_end": 21},
+    platforms=("futures",),
+)
+def ict_sweep_engulf_strategy(df: pd.DataFrame, **params) -> pd.DataFrame:
+    return ict_sweep_engulf_core(df, **params)
+
+
+# ─────────────────────────────────────────────
+# Per-platform display order.
+# These lists preserve canonical registration order. Deprecated strategies may
+# remain here when hidden from discovery, so explicit configs keep resolving.
+# ─────────────────────────────────────────────
+
 PLATFORM_ORDER: Dict[str, List[str]] = {
     "spot": [
         "sma_crossover", "ema_crossover", "rsi", "bollinger_bands", "macd",
@@ -1629,6 +1699,7 @@ PLATFORM_ORDER: Dict[str, List[str]] = {
         "funding_skew", "donchian_breakout", "session_breakout", "bear_pullback_st",
         "vwap_rejection_st", "momentum_pro", "mean_reversion_pro", "rsi_bb_combo",
         "consolidation_range", "atr_band_revert", "mtf_confluence", "vol_momentum",
-        "regime_adaptive", "regime_adaptive_htf", "analog_retrieval", "hold",
+        "regime_adaptive", "regime_adaptive_htf", "analog_retrieval",
+        "volume_momentum", "momentum_breakout", "ict_liquidity_sweep", "ict_sweep_engulf", "hold",
     ],
 }
