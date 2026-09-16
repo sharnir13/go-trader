@@ -198,7 +198,7 @@ func deriveFeedRequirements(cfg *Config) (feedRequirements, error) {
 		sort.Strings(errs)
 		return feedRequirements{}, fmt.Errorf("market_feed=websocket rejects this config:\n  %s", strings.Join(errs, "\n  "))
 	}
-	hlCoins, _ := collectPerpsMarkSymbols(cfg.Strategies)
+	hlCoins, _, _ := collectPerpsMarkSymbols(cfg.Strategies)
 	req.MidCoins = hlCoins
 	req.finalize()
 	return req, nil
