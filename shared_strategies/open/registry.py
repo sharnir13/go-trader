@@ -47,6 +47,7 @@ from volume_momentum import volume_momentum_core
 from momentum_breakout import momentum_breakout_core
 from ict_liquidity_sweep import ict_liquidity_sweep_core
 from ict_sweep_engulf import ict_sweep_engulf_core
+from sma200_touch import sma200_touch_core
 
 
 VALID_PLATFORMS: Tuple[str, ...] = ("spot", "futures")
@@ -1666,6 +1667,21 @@ def ict_sweep_engulf_strategy(df: pd.DataFrame, **params) -> pd.DataFrame:
     return ict_sweep_engulf_core(df, **params)
 
 
+@register(
+    "sma200_touch",
+    "SMA200 Touch — fade rejections off the SMA200 level: wick comes within touch_atr_mult*ATR of SMA200 and the bar closes back across the level in body direction. Entries only — pair with stop_loss_atr_mult (2x) and tiered_tp_atr (1.5x half / 3x rest); validated in scripts/scan_level_multicrit_2026-09-17.py (ARB 4h PASS: E +0.60%, PF 2.54, DD 4.9%)",
+    {"sma_period": 200, "atr_period": 14, "touch_atr_mult": 0.5},
+    platforms=("futures",),
+    constraints=[
+        "sma_period > 0",
+        "atr_period > 0",
+        "touch_atr_mult > 0",
+    ],
+)
+def sma200_touch_strategy(df: pd.DataFrame, **params) -> pd.DataFrame:
+    return sma200_touch_core(df, **params)
+
+
 # ─────────────────────────────────────────────
 # Per-platform display order.
 # These lists preserve canonical registration order. Deprecated strategies may
@@ -1700,6 +1716,6 @@ PLATFORM_ORDER: Dict[str, List[str]] = {
         "vwap_rejection_st", "momentum_pro", "mean_reversion_pro", "rsi_bb_combo",
         "consolidation_range", "atr_band_revert", "mtf_confluence", "vol_momentum",
         "regime_adaptive", "regime_adaptive_htf", "analog_retrieval",
-        "volume_momentum", "momentum_breakout", "ict_liquidity_sweep", "ict_sweep_engulf", "hold",
+        "volume_momentum", "momentum_breakout", "ict_liquidity_sweep", "ict_sweep_engulf", "sma200_touch", "hold",
     ],
 }

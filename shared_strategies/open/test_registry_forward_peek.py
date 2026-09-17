@@ -255,6 +255,7 @@ STRATEGY_FIXTURES = {
     "momentum_breakout": _volume_breakout_fixture,
     "ict_liquidity_sweep": _ict_sweep_fixture,
     "ict_sweep_engulf": _ict_sweep_fixture,
+    "sma200_touch": _ict_sweep_fixture,
 }
 
 _FIXTURE_CACHE = {}
